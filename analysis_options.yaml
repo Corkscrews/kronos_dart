@@ -1,0 +1,10 @@
+include: package:lints/recommended.yaml
+formatter:
+  page_width: 80
+linter:
+  rules:
+    - prefer_final_locals
+    - unnecessary_lambdas
+    - avoid_positional_boolean_parameters
+    - prefer_expression_function_bodies
+    - unnecessary_breaks

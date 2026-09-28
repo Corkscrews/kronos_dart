@@ -1,0 +1,16 @@
+name: kronos_dart
+description: A Dart NTP client and monotonic synchronized clock.
+version: 0.0.1
+license: MIT
+publish_to: none
+
+environment:
+  sdk: ^3.7.0
+
+dependencies:
+  crypto: ^3.0.7
+  universal_io: ^2.3.1
+
+dev_dependencies:
+  lints: ^6.1.0
+  test: ^1.25.0
