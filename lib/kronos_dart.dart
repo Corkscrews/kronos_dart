@@ -18,4 +18,5 @@ export 'src/storage.dart'
         TimeStorage,
         TimeStoragePolicy,
         TimeStorageBackend;
-export 'src/time/local_clock.dart' show ClockSource;
+export 'src/time/local_clock.dart'
+    show ClockCalibration, ClockMode, ClockSource;

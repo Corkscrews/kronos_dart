@@ -29,8 +29,7 @@ class StableTime {
     StableTime? previous,
     ClockSource source = ClockSource.process,
   }) {
-    final uptime = source.monotonicTime();
-    final timestamp = currentTime();
+    final (:uptime, :timestamp) = source.sample();
     final time = offset + timestamp;
     final discipline = _discipline(previous, uptime, time);
     final (leapTime, leapStep) = _leapSchedule(leap, time);

@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:kronos_dart/kronos_dart.dart' show NtpEstimate, NtpProgress;
 import 'package:kronos_dart/src/models.dart' show LeapIndicator;
 import 'package:kronos_dart/src/protocol.dart';
 import 'package:kronos_dart/src/time/local_clock.dart';
@@ -59,3 +60,15 @@ StableTime restoredTime({
     ...extra,
   }, source: fixedSource(monotonicNow));
 }
+
+/// One completed NTP pass that estimates [offset].
+NtpProgress progressWith(double offset) => NtpProgress(
+  estimate: NtpEstimate(
+    offset: offset,
+    leap: LeapIndicator.noWarning,
+    rootDistance: 0.01,
+  ),
+  completed: 1,
+  total: 1,
+  measurements: const [],
+);

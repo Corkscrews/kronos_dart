@@ -8,7 +8,11 @@ import 'package:kronos_dart/kronos_dart.dart' hide NtpPool;
 import 'example_model.dart';
 import 'led_clock.dart';
 
-void main() => runApp(const KronosExampleApp());
+void main() {
+  // ios/Runner/PrivacyInfo.xcprivacy declares the boot-time reason this needs.
+  KronosClock.useKernelClock();
+  runApp(const KronosExampleApp());
+}
 
 class KronosExampleApp extends StatefulWidget {
   const KronosExampleApp({super.key});
@@ -229,6 +233,8 @@ class _Metrics extends StatelessWidget {
                     : _milliseconds(model.offset, signed: true)),
             _MetricRow('Uncertainty', _milliseconds(annotated?.uncertainty)),
             _MetricRow('Best RTT', _milliseconds(model.bestRoundTrip)),
+            if (KronosClock.calibration.mode == ClockMode.kernel)
+              _MetricRow('Kernel − Flutter', _microseconds(_kernelDrift())),
             _MetricRow('Since sync', _seconds(annotated?.timeSinceLastNtpSync)),
             if (model.total > 0)
               _MetricRow('Attempts', '${model.completed} / ${model.total}'),
@@ -469,6 +475,17 @@ String _milliseconds(double? value, {bool signed = false}) {
   if (value == null) return '—';
   final number = (value * 1000).toStringAsFixed(1);
   return signed && value >= 0 ? '+$number ms' : '$number ms';
+}
+
+/// Kernel timescale (`CLOCK_MONOTONIC_RAW + C`) minus Flutter's `DateTime.now()`.
+double _kernelDrift() {
+  final flutter = DateTime.now().microsecondsSinceEpoch / 1e6;
+  return ClockSource.process.sample().timestamp - flutter;
+}
+
+String _microseconds(double value) {
+  final number = (value * 1e6).toStringAsFixed(1);
+  return value >= 0 ? '+$number µs' : '$number µs';
 }
 
 String _seconds(double? value) =>
