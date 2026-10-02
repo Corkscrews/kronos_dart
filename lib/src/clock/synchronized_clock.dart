@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import '../models.dart';
 import '../ntp/client.dart';
@@ -6,6 +7,7 @@ import '../ntp/kiss_of_death.dart';
 import '../storage.dart';
 import '../time/local_clock.dart';
 import '../time/stable_time.dart';
+import 'shared_clock.dart';
 
 typedef NtpQuery = Stream<NtpProgress> Function(NtpConfiguration configuration);
 
@@ -40,6 +42,19 @@ abstract interface class SynchronizedClock {
   });
 
   void reset();
+
+  /// A port other isolates pass to [follow] to read this clock.
+  ///
+  /// This isolate stays the authority: it alone queries NTP, calibrates and
+  /// reads the boot identifier, and followers reuse its results. Only a clock
+  /// on [ClockSource.process] can be shared.
+  SendPort share();
+
+  /// A read-only clock that mirrors the clock behind [main], a port from
+  /// [share]. Call it before this isolate reads the clock: the follower adopts
+  /// the main isolate's calibration, including its [ClockMode].
+  static Future<SynchronizedClock> follow(SendPort main) =>
+      FollowerClock.follow(main);
 }
 
 /// NTP-backed [SynchronizedClock] with injectable query and clock sources.
@@ -66,6 +81,9 @@ class _NtpSynchronizedClock implements SynchronizedClock {
   bool _loaded = false;
   Timer? _pollTimer;
   final Set<_SyncPass> _activePasses = {};
+  late final ClockPublisher _publisher = ClockPublisher(
+    () => _source.isProcess ? _current?.toMap() : null,
+  );
 
   NtpQuery get query => _queryOverride ?? _defaultQuery;
   @override
@@ -123,6 +141,15 @@ class _NtpSynchronizedClock implements SynchronizedClock {
     _stop();
     _state = null;
     _loaded = true;
+    _publisher.publish();
+  }
+
+  @override
+  SendPort share() {
+    if (!_source.isProcess) {
+      throw StateError('Only a clock on ClockSource.process can be shared.');
+    }
+    return _publisher.sendPort;
   }
 
   void _reconfigure(void Function() change) {
@@ -130,6 +157,7 @@ class _NtpSynchronizedClock implements SynchronizedClock {
     change();
     _state = null;
     _loaded = false;
+    _publisher.publish();
   }
 
   StableTime? get _current {
@@ -188,12 +216,13 @@ class _NtpSynchronizedClock implements SynchronizedClock {
     );
     _state = freeze;
     _storage.stableTime = freeze;
+    _publisher.publish();
     final annotated = freeze.annotated(atUptime: _source.monotonicTime());
     if (annotated == null) return;
     pass.emit(
       SyncSample(
         date: annotated.date,
-        offset: estimate.offset,
+        offset: estimate.offset + systemClockCorrection(),
         completed: update.completed,
         total: update.total,
         measurements: update.measurements,

@@ -75,6 +75,62 @@ final configuration = NtpConfiguration(
 MD5 and SHA-1 NTP MACs are supported. Public NTP pools do not share a key and
 should use the default unauthenticated configuration.
 
+## Precision on iOS and Android
+
+By default Kronos reads `DateTime.now()` and a `Stopwatch`. That needs no
+privacy-manifest entry, resolves to 1 µs, follows system clock changes, and
+cannot restore state across launches.
+
+On iOS and macOS the app can opt in to the kernel clocks instead
+(`CLOCK_MONOTONIC_RAW` and `kern.bootsessionuuid`). That gives a monotonic
+clock that keeps counting during sleep, ignores system clock changes, and is
+shared by every isolate and process on the same boot. Apple lists boot-time
+reads as a "required reason" API, so first declare it in
+`ios/Runner/PrivacyInfo.xcprivacy`:
+
+```xml
+<key>NSPrivacyAccessedAPITypes</key>
+<array>
+  <dict>
+    <key>NSPrivacyAccessedAPIType</key>
+    <string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+    <key>NSPrivacyAccessedAPITypeReasons</key>
+    <array><string>35F9.1</string></array>
+  </dict>
+</array>
+```
+
+Then, before the first Kronos read:
+
+```dart
+KronosClock.useKernelClock(); // false where unsupported; the default clock stays
+```
+
+Without the declaration, leave it out: Kronos keeps the portable clock.
+
+On Android (and Linux) the same call reads `CLOCK_BOOTTIME` and the kernel
+`boot_id`, and needs no manifest change. It is the only mode that counts device
+sleep there: the portable `Stopwatch` stops while the phone is suspended.
+`KronosClock.calibration` reports the mode, precision and clock-pairing windows
+measured at startup.
+
+## Isolates
+
+The main isolate is the authority: it alone queries NTP, calibrates and reads
+the boot identifier. Other isolates follow it and reuse that data, so they make
+no NTP or calibration calls of their own:
+
+```dart
+final port = KronosClock.share(); // main isolate
+await Isolate.run(() async {
+  await KronosClock.follow(port); // follower; inherits the kernel opt-in
+  print(KronosClock.now);
+});
+```
+
+A follower receives every update and reset. `sync()` on a follower is an
+error. Call `follow` before the follower reads the clock.
+
 ## Storage and platforms
 
 The default `TimeStorage` keeps the last stable timestamp in memory. A storage
